@@ -9,6 +9,10 @@ def create_app():
     app.config.from_object(Config)
     db.init_app(app)
 
+    from app.routes.video_routes import video_bp
+
+    app.register_blueprint(video_bp)
+
     @app.route("/", methods=["GET"])
     def index():
         return "Hello World!"

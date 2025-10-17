@@ -10,6 +10,7 @@ class Video(db.Model):
     size_mb = db.Column(db.Float, nullable=False)
     fps = db.Column(db.Float, nullable=False)
     total_frames = db.Column(db.Integer, nullable=False)
+    duration = db.Column(db.Float, nullable=False)
     width = db.Column(db.Integer, nullable=False)
     height = db.Column(db.Integer, nullable=False)
     
