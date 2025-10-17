@@ -2,6 +2,7 @@ from threading import Thread
 from app.models import Video, Job
 from app.app import db
 from app.utils import extract_frames
+from app.services.face_services import detect_faces
 
 import os
 
@@ -24,7 +25,7 @@ def extract_and_detect_task(app, job_id):
 
         try:
             extract_frames(video_path, frame_dir)
-            # detect faces
+            detect_faces(frame_dir, video, job)
 
             job.status = "completed"
             job.progress = 100.0

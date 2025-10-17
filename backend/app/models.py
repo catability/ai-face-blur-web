@@ -30,5 +30,5 @@ class DetectionLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     job_id = db.Column(db.Integer, db.ForeignKey("job.id"), nullable=False)
 
-    frame_idx = db.Column(db.Integer),
+    frame_idx = db.Column(db.Integer)
     bboxes = db.Column(db.String)

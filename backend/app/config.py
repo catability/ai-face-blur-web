@@ -15,3 +15,6 @@ class Config:
     os.makedirs(FRAMES_FOLDER, exist_ok=True)
     os.makedirs(PROCESSED_FRAMES_FOLDER, exist_ok=True)
     os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
+
+    PREVIEWS_FOLDER = os.path.join(BASE_DIR, "static", "previews")
+    os.makedirs(PREVIEWS_FOLDER, exist_ok=True)
