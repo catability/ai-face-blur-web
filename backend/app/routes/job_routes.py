@@ -1,5 +1,5 @@
-from flask import Blueprint, jsonify, current_app, url_for
-from app.models import Job
+from flask import Blueprint, jsonify, current_app, url_for, send_file
+from app.models import Video, Job
 from app.services.video_services import start_export_job_to_video
 
 import os
@@ -56,3 +56,34 @@ def export_job_to_video(job_id):
         "status": job.status,
         "progress": job.progress
     })
+
+@job_bp.route("/<int:job_id>/download", methods=["GET"])
+def download_job_video(job_id):
+    job = Job.query.get(job_id)
+
+    if not job:
+        return jsonify({
+            "error": "Job not found"
+        }), 404
+    
+    if job.status != "done":
+        return jsonify({
+            "error" "Job is not done yet"
+        }), 400
+    
+    output_path = os.path.join(current_app.config["OUTPUTS_FOLDER"], f"job_{job_id}.mp4")
+
+    if not os.path.exists(output_path):
+        return jsonify({
+            "error": "Output file not found"
+        }), 404
+    
+    video = Video.query.get(job.video_id)
+
+    if video:
+        filename, ext = os.path.splitext(video.filename_original)
+        download_name = f"{filename}_export{ext}"
+    else:
+        download_name = f"job_{job_id}.mp4"
+
+    return send_file(output_path, as_attachment=True, download_name=download_name)
