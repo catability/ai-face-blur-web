@@ -54,9 +54,8 @@ def detect_faces(frame_dir, video, job):
 
         if current_per > last_per or (idx - 1) % int(video.fps) == 0:
             last_per = current_per
-            job.progress = progress
+            job.progress = current_per
             db.session.commit()
-            print(current_per)
 
             cv2.imwrite(preview_path, img)
     
