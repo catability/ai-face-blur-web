@@ -1,0 +1,34 @@
+from flask import Blueprint, jsonify, current_app, url_for
+from app.models import Job
+
+import os
+
+job_bp = Blueprint("job", __name__, url_prefix="/jobs")
+
+
+@job_bp.route("/<int:job_id>", methods=["GET"])
+def get_job_status(job_id):
+    job = Job.query.get(job_id)
+
+    if not job:
+        return jsonify({
+            "error": "Job not found"
+        }), 404
+    
+    response_data = {
+        "job_id": job.id,
+        "video_id": job.video_id,
+        "status": job.status,
+        "progress": job.progress
+    }
+
+    if job.status == "running":
+        preview_dir = current_app.config["PREVIEWS_FOLDER"]
+        preview_filename = f"{job.id}_preview.jpg"
+
+        if os.path.exists(os.path.join(preview_dir, preview_filename)):
+            response_data["preview_url"] = url_for("static", filename=f"previews/{preview_filename}")
+        else:
+            response_data["preview_url"] = None
+
+    return jsonify(response_data)
