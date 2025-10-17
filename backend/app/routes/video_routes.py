@@ -1,8 +1,9 @@
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 from app.utils import get_video_metadata
-from app.models import Video
+from app.models import Video, Job
 from app.app import db
+from app.services.video_services import start_process_job
 
 import os
 import uuid
@@ -67,7 +68,9 @@ def upload_video():
         "total_frames": video.total_frames,
         "duration": video.duration,
         "width": video.width,
-        "height": video.height
+        "height": video.height,
+        "status": video.status,
+        "uploaded_at": video.uploaded_at
     }), 201
 
 @video_bp.route("/<int:video_id>/jobs", methods=["POST"])
@@ -79,8 +82,15 @@ def create_job(video_id):
             "error": "Video not found"
         }), 404
     
-    # job = start_create_job(video)
+    job = Job(video_id=video_id)
+    db.session.add(job)
+    db.session.commit()
+
+    start_process_job(current_app._get_current_object(), job.id)
 
     return jsonify({
-        
+        "job_id": job.id,
+        "video_id": job.video_id,
+        "status": job.status,
+        "progress": job.progress
     })
