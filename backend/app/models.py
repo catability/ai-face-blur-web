@@ -17,9 +17,18 @@ class Video(db.Model):
     status = db.Column(db.String(50), default="uploaded")
     uploaded_at = db.Column(db.DateTime, default = datetime.utcnow)
 
+
 class Job(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     video_id = db.Column(db.Integer, db.ForeignKey("video.id"), nullable=False)
 
     status = db.Column(db.String(50), default="pending")
     progress = db.Column(db.Float, default=0.0)
+
+
+class DetectionLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.Integer, db.ForeignKey("job.id"), nullable=False)
+
+    frame_idx = db.Column(db.Integer),
+    bboxes = db.Column(db.String)
