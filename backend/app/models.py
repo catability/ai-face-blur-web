@@ -14,7 +14,7 @@ class Video(db.Model):
     height = db.Column(db.Integer, nullable=False)
     
     status = db.Column(db.String(50), default="uploaded")
-    uploaded_at = db.column(db.DateTime, default = datetime.utcnow)
+    uploaded_at = db.Column(db.DateTime, default = datetime.utcnow)
 
 class Job(db.Model):
     id = db.Column(db.Integer, primary_key=True)
