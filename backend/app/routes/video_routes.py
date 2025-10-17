@@ -69,3 +69,18 @@ def upload_video():
         "width": video.width,
         "height": video.height
     }), 201
+
+@video_bp.route("/<int:video_id>/jobs", methods=["POST"])
+def create_job(video_id):
+    video = Video.query.get(video_id)
+
+    if not video:
+        return jsonify({
+            "error": "Video not found"
+        }), 404
+    
+    # job = start_create_job(video)
+
+    return jsonify({
+        
+    })
