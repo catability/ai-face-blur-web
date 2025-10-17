@@ -86,7 +86,7 @@ def create_job(video_id):
     db.session.add(job)
     db.session.commit()
 
-    start_process_job(current_app._get_current_object(), job.id)
+    start_process_job(job.id)
 
     return jsonify({
         "job_id": job.id,
