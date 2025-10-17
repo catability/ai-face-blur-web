@@ -60,3 +60,41 @@ def detect_faces(frame_dir, video, job):
             cv2.imwrite(preview_path, img)
     
     db.session.commit()
+
+def blur_faces(frames_dir, processed_frames_dir, video, job):
+    logs = DetectionLog.query.filter_by(job_id=job.id).order_by(DetectionLog.frame_idx).all()
+    last_per = 0
+
+    for idx, log in enumerate(logs, start=1):
+        frame_file = f"frame_{log.frame_idx:04d}.jpg"
+        input_path = os.path.join(frames_dir, frame_file)
+        output_path = os.path.join(processed_frames_dir, frame_file)
+
+        img = cv2.imread(input_path)
+
+        if img is None:
+            continue
+
+        try:
+            bboxes = json.loads(log.bboxes)
+        except:
+            bboxes = []
+
+        for bbox in bboxes:
+            x, y, w, h, track_id = bbox["x"], bbox["y"], bbox["w"], bbox["h"], bbox["id"]
+
+            face_region = img[y:y+h, x:x+w]
+            if face_region.size > 0:
+                blurred = cv2.GaussianBlur(face_region, (51, 51), 30)
+                img[y:y+h, x:x+w] = blurred
+        
+        cv2.imwrite(output_path, img)
+
+
+        progress = (idx / video.total_frames) * 100
+        current_per = math.floor(progress)
+
+        if current_per > last_per:
+            last_per = current_per
+            job.progress = current_per
+            db.session.commit()

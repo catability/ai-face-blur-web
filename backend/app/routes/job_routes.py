@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, current_app, url_for
 from app.models import Job
+from app.services.video_services import start_export_job_to_video
 
 import os
 
@@ -47,7 +48,7 @@ def export_job_to_video(job_id):
             "error" "Job is not ready for export"
         }), 400
     
-    # start export job to video
+    start_export_job_to_video(job.id)
 
     return jsonify({
         "job_id": job.id,

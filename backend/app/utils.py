@@ -20,3 +20,6 @@ def get_video_metadata(file_path):
 
 def extract_frames(video_path, output_dir):
     ffmpeg.input(video_path).output(os.path.join(output_dir, "frame_%04d.jpg"), qscale=2).run()
+
+def frames_to_video(frames_dir, output_path, fps):
+    ffmpeg.input(os.path.join(frames_dir, "frame_%04d.jpg"), framerate=fps).output(output_path, vcodec="libx264", pix_fmt="yuv420p").run()
