@@ -45,7 +45,7 @@ def export_job_to_video(job_id):
     
     if job.status != "completed":
         return jsonify({
-            "error" "Job is not ready for export"
+            "error": "Job is not ready for export"
         }), 400
     
     start_export_job_to_video(job.id)
