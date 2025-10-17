@@ -4,5 +4,9 @@ venv/
 
 __pycache__/
 
-# db file
+# data files
 *.db
+uploads/
+frames/
+outputs/
+processed_frames/
