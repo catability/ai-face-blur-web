@@ -1,6 +1,7 @@
 from threading import Thread
 from app.models import Video, Job
 from app.app import db
+from app.utils import extract_frames
 
 import os
 
@@ -22,7 +23,7 @@ def extract_and_detect_task(app, job_id):
         os.makedirs(frame_dir, exist_ok=True)
 
         try:
-            # extract frames
+            extract_frames(video_path, frame_dir)
             # detect faces
 
             job.status = "completed"

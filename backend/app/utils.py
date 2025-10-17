@@ -1,4 +1,6 @@
 import cv2
+import ffmpeg
+import os
 
 def get_video_metadata(file_path):
     cap = cv2.VideoCapture(file_path)
@@ -15,3 +17,6 @@ def get_video_metadata(file_path):
     cap.release()
 
     return fps, total_frames, duration, width, height
+
+def extract_frames(video_path, output_dir):
+    ffmpeg.input(video_path).output(os.path.join(output_dir, "frame_%04d.jpg"), qscale=2).run()
