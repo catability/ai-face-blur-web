@@ -1,0 +1,383 @@
+/* ==========================
+   1. 글로벌 및 기본 설정
+   ========================== */
+
+/* 모든 요소의 box-sizing을 통일하여 레이아웃 계산을 쉽게 만듭니다. */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f0f2f5; /* 앱 배경색 */
+    color: #333;
+    line-height: 1.6;
+}
+
+header {
+    background-color: #ffffff;
+    padding: 1rem 2rem;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+h1 {
+    font-size: 1.5rem;
+    color: #1a1a1a;
+}
+
+/* 각 패널의 제목 스타일 (h2) */
+h2 {
+    font-size: 1.2rem;
+    color: #1a1a1a;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+/* 각 섹션의 소제목 스타일 (h3) */
+h3 {
+    font-size: 1rem;
+    color: #444;
+    margin-bottom: 10px;
+}
+
+button {
+    font-size: 0.9rem;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    background-color: #007aff; /* 메인 CTA 색상 */
+    color: white;
+    transition: background-color 0.2s ease;
+    width: 100%; /* 버튼 기본 넓이 */
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+button:disabled {
+    background-color: #c0c0c0;
+    cursor: not-allowed;
+}
+
+/* 유틸리티 클래스 */
+.hidden {
+    display: none !important;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+/* ==========================
+   2. 메인 레이아웃 (3단 패널)
+   ========================== */
+
+.main-container {
+    display: flex;
+    flex-wrap: wrap; /* 화면이 좁아지면 줄바꿈 허용 (모바일 고려) */
+    gap: 20px;
+    padding: 20px;
+    /* 최소 높이를 설정해 뷰포트를 채우도록 함 */
+    min-height: calc(100vh - 80px); /* 헤더 높이 제외 */
+}
+
+.panel {
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* 패널 내부 요소 간 간격 */
+}
+
+/* * 패널 비율 설정: (좌: 1 | 중앙: 2.5 | 우: 1.5)
+ * flex-grow, flex-shrink, flex-basis를 사용
+ * min-width를 설정해 패널이 과도하게 좁아지는 것을 방지
+*/
+.left-panel {
+    flex: 1;
+    min-width: 280px;
+}
+
+.center-panel {
+    flex: 2.5;
+    min-width: 450px;
+}
+
+.right-panel {
+    flex: 1.5;
+    min-width: 300px;
+}
+
+/* ==========================
+   3. 왼쪽 패널 (컨트롤)
+   ========================== */
+
+#video-drop-area {
+    border: 2px dashed #007aff;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    background-color: #f9faff;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    min-height: 150px; /* 최소 높이 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#video-drop-area:hover {
+    background-color: #f0f6ff;
+}
+
+#video-drop-area p {
+    color: #007aff;
+    font-weight: 500;
+}
+
+#video-thumbnail {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.info-section {
+    background-color: #f9f9f9;
+    padding: 12px;
+    border-radius: 6px;
+}
+
+.info-section p {
+    font-size: 0.9rem;
+    display: flex;
+    justify-content: space-between;
+}
+.info-section span {
+    font-weight: 500;
+    color: #555;
+}
+
+#status-message {
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 8px;
+    text-align: center;
+}
+
+#progress-bar {
+    width: 100%;
+    height: 10px;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+}
+.button-group button {
+    flex: 1; /* 버튼이 50%씩 공간 차지 */
+}
+
+/* 저장 버튼 - 다른 색상 적용 */
+#save-button {
+    background-color: #34c759; /* 초록색 계열 */
+}
+#save-button:hover {
+    background-color: #2a9e48;
+}
+
+/* ==========================
+   4. 중앙 패널 (비디오)
+   ========================== */
+
+#video-player-container {
+    width: 100%;
+    background-color: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    /* 16:9 비율 유지 (요청사항 반영) */
+    aspect-ratio: 16 / 9;
+    position: relative; /* 세로 영상 대응을 위해 */
+}
+
+#main-video {
+    width: 100%;
+    height: 100%;
+    /* 세로 영상일 때 위아래 여백이 생기도록 함 */
+    object-fit: contain;
+}
+
+#main-timeline-seek {
+    width: 100%;
+    margin-top: 10px;
+}
+
+#object-timeline-container {
+    border-top: 1px solid #eee;
+    padding-top: 15px;
+}
+
+#object-timeline-editor {
+    min-height: 100px;
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    color: #777;
+}
+
+/* ==========================
+   5. 오른쪽 패널 (객체 리스트)
+   ========================== */
+
+/* 오른쪽 패널을 상/하 50%로 나누기 위해 flex 사용 */
+.right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    /* 패널 간 간격이 20px이므로 padding도 조절 */
+    padding: 20px;
+}
+
+#object-list-section {
+    flex: 1; /* 상단 영역이 50% 차지 */
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* flex 자식의 축소 허용 */
+}
+
+#detected-object-list {
+    list-style: none;
+    flex: 1; /* 부모(#object-list-section)의 남은 공간을 모두 차지 */
+    overflow-y: auto; /* 내용이 많아지면 스크롤 */
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 5px;
+}
+
+/* (JS로 추가될) 객체 아이템 예시 스타일 */
+.object-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.object-item:last-child {
+    border-bottom: none;
+}
+
+.object-item:hover {
+    background-color: #f5f5f5;
+}
+
+.object-item.active {
+    background-color: #e6f2ff;
+    border-left: 3px solid #007aff;
+}
+
+.object-item img {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%; /* 원형 썸네일 */
+    object-fit: cover;
+    background-color: #eee;
+}
+
+#object-details-section {
+    flex: 1; /* 하단 영역이 50% 차지 */
+    border-top: 1px solid #eee;
+    padding-top: 20px;
+    overflow-y: auto; /* 상세 내용이 길어지면 스크롤 */
+}
+
+#details-placeholder {
+    color: #777;
+    text-align: center;
+    margin-top: 20px;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+}
+
+.detail-item label {
+    font-weight: 500;
+}
+
+.detail-item input[type="text"] {
+    width: 60%;
+    padding: 5px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+/* 블러 처리용 토글 스위치 (체크박스) */
+#detail-blur {
+    width: 40px;
+    height: 20px;
+    appearance: none;
+    background: #ccc;
+    outline: none;
+    border-radius: 20px;
+    transition: 0.3s;
+    position: relative;
+    cursor: pointer;
+}
+
+#detail-blur:before {
+    content: '';
+    position: absolute;
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    background: white;
+    top: 2px;
+    left: 2px;
+    transition: 0.3s;
+}
+
+#detail-blur:checked {
+    background: #34c759;
+}
+
+#detail-blur:checked:before {
+    transform: translateX(20px);
+}
+
+
+#detail-timestamps {
+    font-size: 0.85rem;
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 4px;
+    max-height: 100px;
+    overflow-y: auto;
+}

@@ -1,46 +1,110 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>간단한 영상 업로드</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 얼굴 인식 자동 블러 웹서비스</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <h1>영상 업로드</h1>
 
-  <!-- 영상 파일 선택 -->
-  <input type="file" id="videoFile" accept="video/*">
-  
-  <!-- 업로드 버튼 -->
-  <button id="uploadBtn">업로드</button>
+    <header>
+        <h1>AI 활용 얼굴 인식 자동 블러 웹서비스</h1>
+    </header>
 
-  <script>
-    const uploadUrl = '/videos/'; // 업로드할 REST API 경로
+    <main class="main-container">
 
-    document.getElementById('uploadBtn').addEventListener('click', () => {
-      const fileInput = document.getElementById('videoFile');
-      const file = fileInput.files[0];
+        <aside class="panel left-panel">
+            <h2>컨트롤 패널</h2>
 
-      if (!file) {
-        alert('업로드할 영상을 선택하세요.');
-        return;
-      }
+            <div id="video-drop-area">
+                <p>여기에 영상을 드래그 앤 드롭하거나<br>클릭하여 업로드하세요.</p>
+                <img id="video-thumbnail" alt="영상 썸네일" class="hidden">
+            </div>
+            <input type="file" id="file-input" accept="video/*" hidden>
 
-      const formData = new FormData();
-      formData.append('file', file);
+            <button id="upload-button" disabled>영상 업로드</button>
 
-      fetch(uploadUrl, {
-        method: 'POST',
-        body: formData
-      })
-      .then(res => {
-        if (!res.ok) {
-            throw new Error(res);
-        }
-        return res.text();
-      })
-      .then(result => alert('업로드 성공: ' + result))
-      .catch(err => alert('에러: ' + err));
-    });
-  </script>
+            <section id="metadata-area" class="info-section hidden">
+                <h3>영상 정보</h3>
+                <p>FPS: <span id="meta-fps">-</span></p>
+                <p>영상 길이: <span id="meta-duration">-</span></p>
+                <p>파일 크기: <span id="meta-size">-</span></p>
+            </section>
+
+            <section id="status-area" class="info-section hidden">
+                <h3>작업 상태</h3>
+                <p id="status-message">대기 중...</p>
+                <progress id="progress-bar" max="100" value="0"></progress>
+            </section>
+
+            <div class="button-group">
+                <button id="save-button">수정 내용 저장</button>
+                <button id="export-button">영상 Export</button>
+            </div>
+
+            <button id="download-button" disabled>영상 다운로드</button>
+
+        </aside>
+
+        <section class="panel center-panel">
+            <h2>비디오 편집기</h2>
+
+            <div id="video-player-container">
+                <video id="main-video" controls>
+                    <source src="" type="video/mp4">
+                    브라우저가 비디오 태그를 지원하지 않습니다.
+                </video>
+            </div>
+
+            <div id="main-timeline-container">
+                <label for="main-timeline-seek" class="visually-hidden">영상 타임라인</label>
+                <input type="range" id="main-timeline-seek" min="0" max="100" value="0">
+            </div>
+
+            <div id="object-timeline-container">
+                <h3>선택 객체 타임라인</h3>
+                <div id="object-timeline-editor">
+                    <p>오른쪽 리스트에서 객체를 선택하면<br>등장 구간 타임라인이 표시됩니다.</p>
+                    </div>
+            </div>
+        </section>
+
+        <aside class="panel right-panel">
+            <h2>탐지된 객체</h2>
+
+            <section id="object-list-section">
+                <h3>객체 리스트</h3>
+                <ul id="detected-object-list">
+                    <li><p>영상을 업로드하면 탐지된 얼굴 목록이 표시됩니다.</p></li>
+                </ul>
+            </section>
+
+            <section id="object-details-section">
+                <h3>객체 상세 정보</h3>
+                
+                <p id="details-placeholder">리스트에서 객체를 선택하세요.</p>
+
+                <div id="details-content" class="hidden">
+                    <div class="detail-item">
+                        <label for="detail-id">객체 ID:</label>
+                        <input type="text" id="detail-id" value="">
+                    </div>
+                    <div class="detail-item">
+                        <label for="detail-blur">블러 처리:</label>
+                        <input type="checkbox" id="detail-blur">
+                    </div>
+                    <div class="detail-item">
+                        <h4>등장 구간:</h4>
+                        <div id="detail-timestamps">
+                            </div>
+                    </div>
+                </div>
+            </section>
+
+        </aside>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
 </body>
 </html>
