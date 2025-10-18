@@ -119,16 +119,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         selectedFile = file;
-        
-        // 1. 썸네일 미리보기 생성
-        const fileURL = URL.createObjectURL(file);
-        videoThumbnail.src = fileURL;
-        videoThumbnail.classList.remove('hidden');
-        dropAreaText.classList.add('hidden');
-        
-        console.log(fileURL)
-        // 2. 중앙 패널 비디오 플레이어에 영상 로드
-        mainVideo.src = fileURL;
+        const fileURL = URL.createObjectURL(file)
+
+        mainVideo.src = fileURL
+
+        mainVideo.addEventListener('seeked', () => {
+            const canvas = document.createElement('canvas')
+
+            canvas.width = mainVideo.videoWidth
+            canvas.height = mainVideo.videoHeight
+
+            const ctx = canvas.getContext("2d")
+            ctx.drawImage(mainVideo, 0, 0, canvas.width, canvas.height)
+            
+            const dataURL = canvas.toDataURL('image/jpeg')
+
+            videoThumbnail.src = dataURL
+
+            videoThumbnail.classList.remove('hidden')
+            dropAreaText.classList.add('hidden')
+        }, { once: true})
+
+        mainVideo.addEventListener('loadeddata', () => {
+            mainVideo.currentTime = 0.1
+        }, { once: true})
         
         // 3. 업로드 버튼 활성화
         uploadButton.disabled = false;
@@ -192,6 +206,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // 탐지된 객체 리스트 채우기
             detectedObjects = result.objects;
             populateObjectList(detectedObjects);
+
+            saveButton.disabled = false
+            exportButton.disabled = false
 
         } catch (error) {
             console.error('Upload failed:', error);
