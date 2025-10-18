@@ -13,7 +13,7 @@ import math
 model = YOLO("model/yolov11n-face.pt")
 
 from deep_sort_realtime.deepsort_tracker import DeepSort
-tracker = DeepSort(max_age=15)
+tracker = DeepSort(max_age=15, n_init=5)
 
 
 def detect_faces(frame_dir, video, job):
@@ -45,10 +45,15 @@ def detect_faces(frame_dir, video, job):
         #     })
 
         detections_for_deepsort = []
+        MIN_CONFIDENCE = 0.5
         for result in results:
             for box in result.boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                 conf = box.conf[0].cpu().numpy()
+
+                if conf < MIN_CONFIDENCE:
+                    continue
+                
                 cls = box.cls[0].cpu().numpy()
 
                 w = x2 - x1
