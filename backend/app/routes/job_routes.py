@@ -1,13 +1,14 @@
 from flask import Blueprint, jsonify, current_app, url_for, send_file
-from app.models import Video, Job
+from app.models import Video, Job, DetectionLog
 from app.services.video_services import start_export_job_to_video
 
 import os
+import json
 
 job_bp = Blueprint("job", __name__, url_prefix="/jobs")
 
 
-@job_bp.route("/<int:job_id>", methods=["GET"])
+@job_bp.route("/<int:job_id>/status", methods=["GET"])
 def get_job_status(job_id):
     job = Job.query.get(job_id)
 
@@ -33,6 +34,63 @@ def get_job_status(job_id):
             response_data["preview_url"] = None
 
     return jsonify(response_data)
+
+@job_bp.route("/<int:job_id>/results", methods=["GET"])
+def get_job_results(job_id):
+    logs = DetectionLog.query.filter_by(job_id=job_id).order_by(DetectionLog.frame_idx).all()
+
+    detection_log = []
+    objectIndex = {}
+    for idx, log in enumerate(logs, start=0):
+        detection_log.append(log.bboxes)
+        bboxes = json.loads(log.bboxes)
+        if len(bboxes) > 0:
+            for bbox in bboxes:
+                id = bbox["id"]
+                if id == None:
+                    continue
+                if not objectIndex.get(id):
+                    objectIndex[id] = {
+                        "id": id,
+                        "frames": [],
+                        "ranges": [],
+                        "bboxByFrame": {},
+                        "meta": {
+                            "blur": True
+                        }
+                    }
+                objectIndex[id]["frames"].append(idx)
+                objectIndex[id]["bboxByFrame"][idx] = bbox
+
+    for id, obj in objectIndex.items():
+        ranges = []
+        frames = obj["frames"]
+        if not frames:
+            continue
+
+        start = frames[0]
+        prev = frames[0]
+
+        for i in range(1, len(frames)):
+            f = frames[i]
+            if f == prev + 1:
+                prev = f
+            else:
+                ranges.append({ "start": start, "end": prev })
+                start = f
+                prev = f
+        ranges.append({ "start": start, "end": prev})
+        obj["ranges"] = ranges
+
+    
+    objects = list(objectIndex.values())
+    for i, obj in enumerate(objects, start=1):
+        obj["label"] = f"obj-{i}"
+
+    return jsonify({
+        "detection_log": detection_log,
+        "objects": objects
+    })
 
 @job_bp.route("/<int:job_id>/export", methods=["POST"])
 def export_job_to_video(job_id):

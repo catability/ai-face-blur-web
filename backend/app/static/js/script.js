@@ -36,7 +36,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // 중앙 패널
     const mainVideo = document.getElementById('main-video');
     const mainTimelineSeek = document.getElementById('main-timeline-seek');
+    const playbackControls = document.getElementById('playback-controls');
+    const rewindButton = document.getElementById('rewind-button');
+    const playPauseButton = document.getElementById('play-pause-button');
+    const forwardButton = document.getElementById('forward-button');
     const objectTimelineEditor = document.getElementById('object-timeline-editor');
+
+    const mainCanvas = document.getElementById('main-canvas')
+    const ctx = mainCanvas.getContext('2d')
+
+    const CANVAS_WIDTH = 1280;
+    const CANVAS_HEIGHT = 720;
+    mainCanvas.width = CANVAS_WIDTH;
+    mainCanvas.height = CANVAS_HEIGHT;
     
     // 오른쪽 패널
     const objectList = document.getElementById('detected-object-list');
@@ -45,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const detailIdInput = document.getElementById('detail-id');
     const detailBlurCheckbox = document.getElementById('detail-blur');
     const detailTimestamps = document.getElementById('detail-timestamps');
+    const detailRanges = document.getElementById('detail-ranges')
 
     // ==========================
     // 2. 상태 변수
@@ -53,6 +66,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let detectedObjects = [];        // 서버에서 받은 탐지 객체 데이터
     let selectedObjectID = null;     // 사용자가 리스트에서 선택한 객체 ID
     let finalDownloadUrl = null;     // Export 완료 후 받을 다운로드 URL
+
+    let isPlaying = false;
+
+    let videoFPS = 30
+    let allDetectionData = []
+    let baseFrameImage = new Image()
+    let videoDrawParams = {}
 
     // ==========================
     // 3. 헬퍼(Helper) 함수
@@ -104,6 +124,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms))
+    }
+
     // ==========================
     // 4. 핵심 기능 함수
     // ==========================
@@ -141,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { once: true})
 
         mainVideo.addEventListener('loadeddata', () => {
-            mainVideo.currentTime = 0.1
+            mainVideo.currentTime = 0.0
         }, { once: true})
         
         // 3. 업로드 버튼 활성화
@@ -161,60 +185,292 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStatus('영상을 업로드하고 분석을 시작합니다...', 'info', true, null); // indeterminate progress
 
         const formData = new FormData();
-        formData.append('video', selectedFile);
+        formData.append('file', selectedFile);
 
         // --- API 연동 (MOCKUP) ---
         // TODO: '/api/upload'를 실제 Flask API 엔드포인트로 변경하세요.
         try {
-            // (시뮬레이션) 2초간 지연
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            // (시뮬레이션) 실제로는 fetch API를 사용합니다.
-            // const response = await fetch('/api/upload', {
-            //     method: 'POST',
-            //     body: formData
-            // });
-            // if (!response.ok) {
-            //     throw new Error('서버 업로드 실패');
-            // }
-            // const result = await response.json(); 
+            const response = await fetch('/videos/', {
+                method: 'POST',
+                body: formData
+            })
 
-            // (시뮬레이션) 서버로부터 받은 가상 응답 데이터
-            const result = {
-                metadata: {
-                    fps: 30,
-                    duration: 185.5, // 초 단위
-                    size: selectedFile.size
-                },
-                objects: [
-                    { id: 'p1', label: 'Person 1', isBlurred: true, thumbnailUrl: 'https://via.placeholder.com/45', timestamps: [{start: 10.5, end: 25.2}, {start: 50.1, end: 60.0}] },
-                    { id: 'p2', label: 'Person 2', isBlurred: false, thumbnailUrl: 'https://via.placeholder.com/45', timestamps: [{start: 15.0, end: 40.7}] }
-                ]
-            };
-            // --- API 연동 (MOCKUP) 종료 ---
-
-            // 성공 시 UI 업데이트
-            updateStatus('업로드 및 자동 분석 완료!', 'success');
-            progressBar.classList.add('hidden');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null)
+                throw new Error(errorData?.error || `서버 오류: ${response.status}`)
+            }
             
+            const uploadResult = await response.json()
+            
+            console.log('Upload Result:', uploadResult)
+
+            updateStatus('업로드 완료. 영상 분석을 시작합니다...', 'info', true, null)
+                        
             // 메타데이터 표시
             metadataArea.classList.remove('hidden');
-            metaFps.textContent = result.metadata.fps;
-            metaDuration.textContent = formatTime(result.metadata.duration);
-            metaSize.textContent = formatSize(result.metadata.size);
+            metaFps.textContent = uploadResult.fps;
+            metaDuration.textContent = formatTime(uploadResult.duration);
+            metaSize.textContent = `${uploadResult.size_mb.toFixed(2)} MB`
 
-            // 탐지된 객체 리스트 채우기
-            detectedObjects = result.objects;
-            populateObjectList(detectedObjects);
+            videoFPS = uploadResult.fps
 
-            saveButton.disabled = false
-            exportButton.disabled = false
+            await handleProcessVideo(uploadResult.video_id)
 
         } catch (error) {
             console.error('Upload failed:', error);
             updateStatus(`업로드 실패: ${error.message}`, 'error');
             uploadButton.disabled = false;
         }
+    }
+
+    /**
+     * 
+     * @param {string} video_id 
+     */
+    async function handleProcessVideo(video_id) {
+        updateStatus('영상 분석 작업을 요청합니다...', 'info', true, 0)
+
+        try {
+            const processResponse = await fetch(`/videos/${video_id}/jobs`, {
+                method: 'POST'
+            })
+
+            if (!processResponse.ok) {
+                const errData = await processResponse.json().catch(() => null)
+                throw new Error(errData?.error || '작업 시작 요청 실패')
+            }
+
+            const job = await processResponse.json()
+
+            if (!job.job_id) {
+                throw new Error('서버에서 job_id를 받지 못했습니다.')
+            }
+
+            updateStatus(`작업(ID: ${job.job_id})이 시작되었습니다. 상태 확인 중...`, 'info', true, job.progress || 0)
+
+            const statusUrl = `/jobs/${job.job_id}/status`
+            await pollForJobStatus(statusUrl)
+
+            console.log("처리는 끝!!")
+            
+            const resultUrl = `/jobs/${job.job_id}/results`
+            const resultResponse = await fetch(resultUrl)
+
+            if (!resultResponse.ok) {
+                throw new Error('최종 결과 데이터 요청 실패')
+            }
+
+            const analysisResult = await resultResponse.json()
+
+            allDetectionData = analysisResult.detection_log
+            detectedObjects = analysisResult.objects
+
+            populateObjectList(detectedObjects)
+            updateStatus('분석 완료! 편집 모드가 활성화되었습니다.', 'success')
+            progressBar.classList.add('hidden')
+
+            initializeEditor()
+
+        } catch (error) {
+            console.error('Analysis failed:', error)
+            throw new Error(`영상 분석 실패: ${error.message}`)
+        }
+
+        saveButton.disabled = false
+        exportButton.disabled = false
+    }
+    
+    async function pollForJobStatus(statusUrl) {
+        const POLLING_INTERVAL = 1000
+
+        while (true) {
+            await sleep(POLLING_INTERVAL)
+
+            let statusResponse
+
+            try {
+                statusResponse = await fetch(statusUrl)
+
+                if (!statusResponse.ok) {
+                    throw new Error(`상태 확인 실패 (HTTP ${statusResponse.status})`)
+                }
+
+                const data = await statusResponse.json()
+
+                if (data.status === 'completed') {
+                    updateStatus('작업 완료. 결과 데이터를 가져옵니다...', 'success', true, 100)
+                    return true
+                } else if (data.status === 'failed') {
+                    throw new Error(data.error_message || '서버에서 작업이 실패했습니다.')
+                } else if (data.status === 'running' || data.status === 'rendering') {
+                    const progress = data.progress || 0
+                    updateStatus(`작업 진행 중... (${progress}%)`, 'info', true, progress)
+
+                    if (data.preview_url) {
+                        drawPreviewFrame(data.preview_url)
+                    }
+                } else {
+                    throw new Error(`알 수 없는 작업 상태: ${data.status}`)
+                }
+            } catch (error) {
+                throw new Error(`상태 확인 중 오류: ${error.message}`)
+            }
+        }
+    }
+
+    /**
+     * [수정] 헬퍼: 캔버스에 '스케일링된' 바운딩 박스를 그립니다.
+     * @param {Array<Object>} bboxes - [{x, y, w, h, id}, ...]
+     * @param {Object} drawParams - { scale, offsetX, offsetY }
+     */
+    function drawBoundingBoxes(bboxes, drawParams) {
+        if (!bboxes || bboxes.length === 0) return; // 데이터 없으면 반환
+
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 2;
+        ctx.font = '16px Arial';
+        ctx.fillStyle = 'red';
+
+        // 캔버스 렌더링 좌표
+        const { scale, offsetX, offsetY } = drawParams;
+
+        bboxes.forEach(bbox => {
+            // [핵심] 원본 bbox 좌표를 캔버스 좌표로 스케일링 및 오프셋 적용
+            const canvasX = (bbox.x * scale) + offsetX;
+            const canvasY = (bbox.y * scale) + offsetY;
+            const canvasW = bbox.w * scale;
+            const canvasH = bbox.h * scale;
+
+            // 스케일링된 좌표로 사각형과 텍스트를 그립니다.
+            ctx.strokeRect(canvasX, canvasY, canvasW, canvasH);
+            ctx.fillText(`ID: ${bbox.id}`, canvasX, canvasY - 5);
+        });
+    }
+
+    /**
+     * [수정] 모드 1: '실시간 미리보기' 프레임을 고정 캔버스에 'contain' 스케일링하여 그립니다.
+     * @param {string} url - 서버가 제공한 preview_url
+     */
+    function drawPreviewFrame(url) {
+        baseFrameImage.onload = () => {
+            const imgWidth = baseFrameImage.width;
+            const imgHeight = baseFrameImage.height;
+
+            // [핵심] 'contain' 스케일 및 중앙 정렬 좌표 계산
+            const scale = Math.min(CANVAS_WIDTH / imgWidth, CANVAS_HEIGHT / imgHeight);
+            const newWidth = imgWidth * scale;
+            const newHeight = imgHeight * scale;
+            const offsetX = (CANVAS_WIDTH - newWidth) / 2;
+            const offsetY = (CANVAS_HEIGHT - newHeight) / 2;
+
+            // 1. 검은색 배경으로 캔버스 클리어 (레터박스 효과)
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // 2. 스케일링된 이미지 그리기
+            ctx.drawImage(baseFrameImage, offsetX, offsetY, newWidth, newHeight);
+            
+            // 3. (요구사항) bboxes는 그리지 않습니다.
+        };
+        baseFrameImage.src = url + '?t=' + new Date().getTime()
+    }
+
+    /**
+     * [수정] 모드 2: '대화형 편집' 모드에서 현재 프레임과 bbox를 'contain' 스케일링하여 그립니다.
+     */
+    function drawCurrentFrameWithBboxes() {
+        // 1. 검은색 배경으로 캔버스 클리어
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // 2. [수정] 전역 변수 'videoDrawParams'를 사용하여 스케일링된 비디오 프레임 그리기
+        const { offsetX, offsetY, newWidth, newHeight } = videoDrawParams;
+        ctx.drawImage(mainVideo, offsetX, offsetY, newWidth, newHeight);
+
+        // 3. [수정] 현재 프레임 인덱스 계산 (0부터 시작)
+        const currentTime = mainVideo.currentTime;
+        const currentFrameIndex = Math.round(currentTime * videoFPS);
+
+        // 4. [수정] allDetectionData[index]가 bboxes 배열 자체임
+        //    (예: allDetectionData[0] -> 1번 프레임의 bboxes)
+        const bboxes = allDetectionData[currentFrameIndex]
+
+        // 5. bbox 데이터가 있으면, 스케일링 파라미터와 함께 그리기
+        if (bboxes) {
+            drawBoundingBoxes(JSON.parse(bboxes), videoDrawParams);
+        }
+    }
+
+    /**
+     * [수정] 모드 2: '대화형 편집' 모드를 초기화하고, 'videoDrawParams'를 계산합니다.
+     */
+    function initializeEditor() {
+        // [핵심] 편집 모드 시작 시, 비디오의 렌더링 좌표를 *한 번만* 계산하여
+        // 전역 변수 'videoDrawParams'에 저장합니다.
+        const vidWidth = mainVideo.videoWidth;
+        const vidHeight = mainVideo.videoHeight;
+        
+        const scale = Math.min(CANVAS_WIDTH / vidWidth, CANVAS_HEIGHT / vidHeight);
+        const newWidth = vidWidth * scale;
+        const newHeight = vidHeight * scale;
+        const offsetX = (CANVAS_WIDTH - newWidth) / 2;
+        const offsetY = (CANVAS_HEIGHT - newHeight) / 2;
+
+        videoDrawParams = { scale, offsetX, offsetY, newWidth, newHeight };
+
+        // 타임라인 활성화 및 설정
+        mainTimelineSeek.disabled = false;
+        mainTimelineSeek.max = mainVideo.duration; 
+        mainTimelineSeek.value = 0;
+        playbackControls.classList.remove('hidden');
+
+        // 이벤트 리스너 연결
+        mainTimelineSeek.addEventListener('input', () => {
+            if (isPlaying) {
+                isPlaying = false;
+                mainVideo.pause();
+                playPauseButton.textContent = '▶';
+            }
+            mainVideo.currentTime = mainTimelineSeek.value;
+        });
+
+        // [수정] 비디오 탐색 완료 시, 수정된 그리기 함수 호출
+        mainVideo.addEventListener('seeked', () => {
+            if (!isPlaying) {
+                drawCurrentFrameWithBboxes();
+            }
+        });
+        
+        mainVideo.addEventListener('timeupdate', () => {
+            mainTimelineSeek.value = mainVideo.currentTime;
+        });
+
+        // 첫 번째 프레임(0.1초)을 그리도록 강제 실행
+        mainVideo.currentTime = 0.0;
+
+        playPauseButton.addEventListener('click', () => {
+            isPlaying = !isPlaying; // 재생 상태를 토글합니다.
+
+            if (isPlaying) {
+                mainVideo.play(); // 비디오 재생 시작
+                playPauseButton.textContent = '❚❚'; // 아이콘을 '일시정지'로 변경
+                requestAnimationFrame(playbackLoop); // 애니메이션 루프 시작
+            } else {
+                mainVideo.pause(); // 비디오 일시정지
+                playPauseButton.textContent = '▶'; // 아이콘을 '재생'으로 변경
+            }
+        });
+
+        rewindButton.addEventListener('click', () => {
+            const seekAmount = mainVideo.duration * 0.1;
+            mainVideo.currentTime = Math.max(0, mainVideo.currentTime - seekAmount);
+        });
+        
+        // 앞으로 가기 버튼 (10%)
+        forwardButton.addEventListener('click', () => {
+            const seekAmount = mainVideo.duration * 0.1;
+            mainVideo.currentTime = Math.min(mainVideo.duration, mainVideo.currentTime + seekAmount);
+        });
     }
 
     /**
@@ -229,22 +485,35 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        objects.forEach(obj => {
+        objects.forEach((obj, index) => {
             const li = document.createElement('li');
             li.className = 'object-item';
             li.dataset.id = obj.id; // data-id 속성에 객체 ID 저장
 
             // 썸네일 이미지
-            const img = document.createElement('img');
-            img.src = obj.thumbnailUrl; // TODO: 실제 썸네일 URL 필드명으로 변경
-            img.alt = '탐지된 얼굴 썸네일';
+            // const img = document.createElement('img');
+            // img.src = obj.thumbnailUrl; // TODO: 실제 썸네일 URL 필드명으로 변경
+            // img.alt = '탐지된 얼굴 썸네일';
 
-            // 객체 레이블(ID)
-            const span = document.createElement('span');
-            span.textContent = obj.label;
+            // [신규] 2. 텍스트 정보 (이름 + 블러 상태)
+            const textContainer = document.createElement('div');
+            textContainer.className = 'object-item-info';
 
-            li.appendChild(img);
-            li.appendChild(span);
+            // [신규] 2-1. 객체 이름 (Label)
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'object-label';
+            // 서버에 저장된 label이 있으면 사용, 없으면 'obj-[인덱스+1]'로 기본값\
+            labelSpan.textContent = obj.label || `obj-${index + 1}`; 
+            
+            // [신규] 2-2. 블러 상태
+            const blurSpan = document.createElement('span');
+            blurSpan.className = 'object-blur-status';
+            blurSpan.textContent = obj.meta.blur ? '🚫 블러됨' : '👁️ 표시됨';
+
+            // li.appendChild(img);
+            textContainer.appendChild(labelSpan);
+            textContainer.appendChild(blurSpan);
+            li.appendChild(textContainer);
 
             // 리스트 아이템 클릭 이벤트
             li.addEventListener('click', () => handleObjectSelect(obj.id));
@@ -273,20 +542,40 @@ document.addEventListener('DOMContentLoaded', () => {
         detailsContent.classList.remove('hidden');
 
         detailIdInput.value = selectedObj.label;
-        detailBlurCheckbox.checked = selectedObj.isBlurred;
+        detailBlurCheckbox.checked = selectedObj.meta.blur;
 
         // 3. 상세 타임스탬프 정보 표시
-        detailTimestamps.innerHTML = '';
-        selectedObj.timestamps.forEach(ts => {
-            const p = document.createElement('p');
-            p.textContent = `${formatTime(ts.start)} - ${formatTime(ts.end)}`;
-            detailTimestamps.appendChild(p);
-        });
+        // detailTimestamps.innerHTML = '';
+        // selectedObj.timestamps.forEach(ts => {
+        //     const p = document.createElement('p');
+        //     p.textContent = `${formatTime(ts.start)} - ${formatTime(ts.end)}`;
+        //     detailTimestamps.appendChild(p);
+        // });
+
+        detailRanges.innerHTML = ''
+        selectedObj.ranges.forEach(range => {
+            const p = document.createElement('p')
+            p.textContent = `${range.start} ~ ${range.end}`
+            detailRanges.appendChild(p)
+        })
 
         // 4. (TODO) 중앙 패널의 '선택 객체 타임라인' 업데이트
         objectTimelineEditor.innerHTML = `
             <p><strong>${selectedObj.label}</strong>의 등장 구간 (편집 기능 구현 필요)</p>
             `;
+    }
+
+    /**
+     * [신규] 비디오 재생 중에 캔버스를 지속적으로 다시 그리는 애니메이션 루프
+     */
+    function playbackLoop() {
+        if (!isPlaying) {
+            return; // isPlaying이 false가 되면 루프 중단
+        }
+        // 현재 비디오 프레임과 bbox를 캔버스에 그립니다.
+        drawCurrentFrameWithBboxes();
+        // 브라우저의 다음 프레임에 맞춰 이 함수를 다시 호출합니다.
+        requestAnimationFrame(playbackLoop);
     }
 
     /**
@@ -298,12 +587,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedObj = detectedObjects.find(obj => obj.id === selectedObjectID);
         if (selectedObj) {
             selectedObj.label = detailIdInput.value;
-            selectedObj.isBlurred = detailBlurCheckbox.checked;
+            selectedObj.meta.blur = detailBlurCheckbox.checked;
 
             // 리스트의 레이블도 함께 업데이트
-            const listItem = objectList.querySelector(`.object-item[data-id="${selectedObjectID}"] span`);
+            const listItem = objectList.querySelector(`.object-item[data-id="${selectedObjectID}"]`);
+            console.log(listItem)
             if (listItem) {
-                listItem.textContent = selectedObj.label;
+                // listItem.textContent = selectedObj.label;
+                const labelSpan = listItem.querySelector('.object-label');
+                if (labelSpan) {
+                    labelSpan.textContent = selectedObj.label;
+                }
+                // 2-2. 블러 상태 텍스트 업데이트
+                const blurSpan = listItem.querySelector('.object-blur-status');
+                if (blurSpan) {
+                    blurSpan.textContent = selectedObj.meta.blur ? '🚫 블러됨' : '👁️ 표시됨';
+                }
+                console.log(labelSpan, blurSpan)
             }
         }
     }
@@ -391,23 +691,23 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * 비디오 플레이어와 타임라인 슬라이더를 동기화합니다.
      */
-    function syncPlayerControls() {
-        // 비디오 재생 시 슬라이더 업데이트
-        mainVideo.addEventListener('timeupdate', () => {
-            if (mainVideo.duration) {
-                const percentage = (mainVideo.currentTime / mainVideo.duration) * 100;
-                mainTimelineSeek.value = percentage;
-            }
-        });
+    // function syncPlayerControls() {
+    //     // 비디오 재생 시 슬라이더 업데이트
+    //     mainVideo.addEventListener('timeupdate', () => {
+    //         if (mainVideo.duration) {
+    //             const percentage = (mainVideo.currentTime / mainVideo.duration) * 100;
+    //             mainTimelineSeek.value = percentage;
+    //         }
+    //     });
 
-        // 슬라이더 조작 시 비디오 시간 업데이트
-        mainTimelineSeek.addEventListener('input', () => {
-            if (mainVideo.duration) {
-                const time = (mainTimelineSeek.value / 100) * mainVideo.duration;
-                mainVideo.currentTime = time;
-            }
-        });
-    }
+    //     // 슬라이더 조작 시 비디오 시간 업데이트
+    //     mainTimelineSeek.addEventListener('input', () => {
+    //         if (mainVideo.duration) {
+    //             const time = (mainTimelineSeek.value / 100) * mainVideo.duration;
+    //             mainVideo.currentTime = time;
+    //         }
+    //     });
+    // }
 
     // ==========================
     // 5. 이벤트 리스너 초기화
@@ -448,6 +748,6 @@ document.addEventListener('DOMContentLoaded', () => {
     detailBlurCheckbox.addEventListener('change', handleDetailsChange);
 
     // 비디오 플레이어 컨트롤 초기화
-    syncPlayerControls();
+    // syncPlayerControls();
 
 });
