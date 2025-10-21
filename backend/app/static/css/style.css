@@ -247,16 +247,27 @@ button:disabled {
 }
 
 #object-timeline-editor {
+    /* [신규] 자식 요소(막대)들이 이 태그를 기준으로 절대 위치를 잡도록 함 */
+    position: relative; 
+    
     min-height: 100px;
     background-color: #f9f9f9;
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     padding: 15px;
+    
+    /* flex 속성은 JavaScript가 placeholder(p 태그)를 지우기 전까지 
+       안내 문구를 중앙 정렬하는 데 사용되므로 그대로 둡니다.
+       position: absolute인 자식 요소(막대)에는 영향을 주지 않습니다.
+    */
     display: flex;
     justify-content: center;
     align-items: center;
     text-align: center;
     color: #777;
+
+    /* [신규] 막대가 밖으로 삐져나가지 않도록 함 */
+    overflow: hidden; 
 }
 
 /* ==========================
@@ -386,7 +397,7 @@ button:disabled {
 }
 
 
-#detail-timestamps {
+#detail-timestamps, #detail-ranges {
     font-size: 0.85rem;
     background-color: #f9f9f9;
     padding: 10px;
@@ -422,4 +433,61 @@ button:disabled {
 }
 #play-pause-button:hover {
     background-color: #0056b3;
+}
+
+/* style.css 하단에 추가 */
+
+.object-item-info {
+    display: flex;
+    flex-direction: column; /* 이름과 상태를 세로로 정렬 */
+    justify-content: center;
+    gap: 4px;
+}
+
+.object-label {
+    font-weight: bold;
+    font-size: 0.95rem;
+    color: #333;
+}
+
+.object-blur-status {
+    font-size: 0.8rem;
+    color: #666;
+}
+
+.timeline-range-bar {
+    position: absolute; /* 부모(#object-timeline-editor) 기준 절대 위치 */
+    
+    /* 트랙의 세로 중앙에 배치 (padding 15px 고려) */
+    top: 50%;
+    transform: translateY(-50%);
+    height: 30px; /* 막대 높이 */
+    
+    background-color: rgba(0, 122, 255, 0.7); /* 파란색 (투명도 70%) */
+    border: 1px solid #007aff;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+
+    /* 3단계를 위한 커서 힌트 */
+    cursor: ew-resize; /* 좌우 리사이즈 커서 */
+}
+
+.timeline-range-handle {
+    position: absolute;
+    top: -3px; /* 막대보다 살짝 위로 */
+    width: 10px; /* 핸들 너비 */
+    height: 36px; /* 막대 높이(30px)보다 길게 */
+    background-color: #fff;
+    border: 2px solid #007aff;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    cursor: col-resize; /* 좌우 크기 조절 커서 */
+}
+
+.timeline-range-handle.left {
+    left: -5px; /* 왼쪽 핸들 위치 */
+}
+
+.timeline-range-handle.right {
+    right: -5px; /* 오른쪽 핸들 위치 */
 }

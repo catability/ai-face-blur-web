@@ -70,9 +70,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPlaying = false;
 
     let videoFPS = 30
+    let videoTotalFrames = 0
     let allDetectionData = []
     let baseFrameImage = new Image()
     let videoDrawParams = {}
+
+    let isResizing = false
+    let currentDragTarget = {
+        barElement: null,
+        rangeObject: null,
+        handleType: null
+    }
 
     // ==========================
     // 3. 헬퍼(Helper) 함수
@@ -213,6 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
             metaSize.textContent = `${uploadResult.size_mb.toFixed(2)} MB`
 
             videoFPS = uploadResult.fps
+            videoTotalFrames = uploadResult.total_frames
 
             await handleProcessVideo(uploadResult.video_id)
 
@@ -319,17 +328,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * [수정] 헬퍼: 캔버스에 '스케일링된' 바운딩 박스를 그립니다.
-     * @param {Array<Object>} bboxes - [{x, y, w, h, id}, ...]
-     * @param {Object} drawParams - { scale, offsetX, offsetY }
+     * [신규] 헬퍼: 현재 프레임이 객체의 ranges 배열 중 하나에 포함되는지 확인
+     * @param {number} frameIndex - 현재 비디오 프레임 인덱스
+     * @param {Array<Object>} ranges - [{start, end}, {start, end}, ...]
      */
-    function drawBoundingBoxes(bboxes, drawParams) {
-        if (!bboxes || bboxes.length === 0) return; // 데이터 없으면 반환
+    function isFrameInRange(frameIndex, ranges) {
+        if (!ranges) return false;
+        
+        // ranges 배열의 [start, end] 구간 중 하나라도 
+        // 현재 frameIndex를 포함하면 true를 반환합니다.
+        return ranges.some(range => frameIndex >= range.start && frameIndex <= range.end);
+    }
 
-        ctx.strokeStyle = 'red';
-        ctx.lineWidth = 2;
-        ctx.font = '16px Arial';
-        ctx.fillStyle = 'red';
+    /**
+     * [수정] 헬퍼: bboxes를 그리되, 'ranges'를 확인하여 블러 처리를 수행합니다.
+     * @param {Array<Object>} bboxes
+     * @param {Object} drawParams
+     * @param {number} currentFrameIndex - [신규] 현재 프레임 인덱스
+     */
+    function drawBoundingBoxes(bboxes, drawParams, currentFrameIndex) {
+        if (!bboxes || bboxes.length === 0) return; // 데이터 없으면 반환
 
         // 캔버스 렌더링 좌표
         const { scale, offsetX, offsetY } = drawParams;
@@ -340,10 +358,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const canvasY = (bbox.y * scale) + offsetY;
             const canvasW = bbox.w * scale;
             const canvasH = bbox.h * scale;
+            
+            const obj = detectedObjects.find(o => o.id === bbox.id);
 
+            const shouldBlur = obj && obj.meta.blur && isFrameInRange(currentFrameIndex, obj.ranges)
+
+            if (shouldBlur) {
+                ctx.save();
+                ctx.filter = 'blur(8px)';
+                ctx.drawImage(
+                mainVideo,      // 원본 이미지
+                    bbox.x, bbox.y, bbox.w, bbox.h,  // [소스] 원본 영상의 좌표
+                    canvasX, canvasY, canvasW, canvasH  // [타겟] 캔버스의 스케일링된 좌표
+                );
+                ctx.restore();
+            }
+
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.font = '16px Arial';
+            ctx.fillStyle = 'red';
             // 스케일링된 좌표로 사각형과 텍스트를 그립니다.
             ctx.strokeRect(canvasX, canvasY, canvasW, canvasH);
-            ctx.fillText(`ID: ${bbox.id}`, canvasX, canvasY - 5);
+            ctx.fillText(`ID: ${obj ? (obj.label || obj.id) : bbox.id}`, canvasX, canvasY - 5);
         });
     }
 
@@ -397,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 5. bbox 데이터가 있으면, 스케일링 파라미터와 함께 그리기
         if (bboxes) {
-            drawBoundingBoxes(JSON.parse(bboxes), videoDrawParams);
+            drawBoundingBoxes(JSON.parse(bboxes), videoDrawParams, currentFrameIndex);
         }
     }
 
@@ -522,6 +559,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function updateDetailRanges(selectedObj) {
+        detailRanges.innerHTML = ''
+        
+        if (!selectedObj.ranges || selectedObj.ranges.length === 0) {
+            detailTimestamps.innerHTML = '<p>등장 구간 정보 없음</p>';
+            return;
+        }
+
+        selectedObj.ranges.forEach(range => {
+            const p = document.createElement('p');
+            p.textContent = `프레임: ${range.start} ~ ${range.end}`;
+            detailRanges.appendChild(p);
+        });
+    }
+
     /**
      * 오른쪽 패널에서 특정 객체를 클릭했을 때 실행됩니다.
      * @param {string} id - 선택된 객체의 ID
@@ -552,17 +604,63 @@ document.addEventListener('DOMContentLoaded', () => {
         //     detailTimestamps.appendChild(p);
         // });
 
-        detailRanges.innerHTML = ''
-        selectedObj.ranges.forEach(range => {
-            const p = document.createElement('p')
-            p.textContent = `${range.start} ~ ${range.end}`
-            detailRanges.appendChild(p)
-        })
+        updateDetailRanges(selectedObj)
 
-        // 4. (TODO) 중앙 패널의 '선택 객체 타임라인' 업데이트
-        objectTimelineEditor.innerHTML = `
-            <p><strong>${selectedObj.label}</strong>의 등장 구간 (편집 기능 구현 필요)</p>
-            `;
+        renderObjectTimeline(selectedObj)
+    }
+
+    /**
+     * [신규] 2단계: 선택된 객체의 타임라인 에디터에 범위 막대를 그립니다.
+     * @param {Object} selectedObj - 현재 선택된 객체
+     */
+    function renderObjectTimeline(selectedObj) {
+        // 1. 트랙 초기화 (기존 placeholder 텍스트 등을 지웁니다)
+        objectTimelineEditor.innerHTML = ''; 
+
+        // 2. 유효성 검사
+        if (videoTotalFrames === 0) {
+            objectTimelineEditor.innerHTML = '<p>전체 프레임 정보를 로드할 수 없습니다.</p>';
+            return;
+        }
+        if (!selectedObj.ranges || selectedObj.ranges.length === 0) {
+            objectTimelineEditor.innerHTML = '<p>선택된 객체의 등장 구간 정보가 없습니다.</p>';
+            return;
+        }
+
+        // 3. ranges 배열을 순회하며 막대 생성
+        selectedObj.ranges.forEach((range, index) => {
+            
+            // 4. 위치(left) 및 크기(width) 계산 (프레임 인덱스 기준)
+            // (range.start / videoTotalFrames) * 100
+            const startPercent = (range.start / videoTotalFrames) * 100;
+            const widthPercent = ((range.end - range.start) / videoTotalFrames) * 100;
+            
+            // 5. 막대(div) 생성
+            const bar = document.createElement('div');
+            bar.className = 'timeline-range-bar';
+            
+            // 6. 계산된 스타일 적용
+            bar.style.left = `${startPercent}%`;
+            bar.style.width = `${widthPercent}%`;
+            
+            // [3단계를 위한 준비] 
+            // 이 DOM 요소가 data 배열의 몇 번째 range를 참조하는지 저장
+            bar.dataset.rangeIndex = index;
+
+            const leftHandle = document.createElement('div');
+            leftHandle.className = 'timeline-range-handle left';
+
+            const rightHandle = document.createElement('div');
+            rightHandle.className = 'timeline-range-handle right';
+            
+            bar.appendChild(leftHandle);
+            bar.appendChild(rightHandle);
+
+            // 7. 트랙에 막대 추가
+            objectTimelineEditor.appendChild(bar);
+
+            initDragEvents(bar, range);
+        });
     }
 
     /**
@@ -591,7 +689,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 리스트의 레이블도 함께 업데이트
             const listItem = objectList.querySelector(`.object-item[data-id="${selectedObjectID}"]`);
-            console.log(listItem)
             if (listItem) {
                 // listItem.textContent = selectedObj.label;
                 const labelSpan = listItem.querySelector('.object-label');
@@ -603,9 +700,98 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (blurSpan) {
                     blurSpan.textContent = selectedObj.meta.blur ? '🚫 블러됨' : '👁️ 표시됨';
                 }
-                console.log(labelSpan, blurSpan)
             }
         }
+    }
+
+    /**
+     * [신규] 3단계 (헬퍼): 막대에 드래그 이벤트를 초기화합니다.
+     */
+    function initDragEvents(barElement, rangeObject) {
+        // 핸들 DOM 요소를 선택합니다.
+        const leftHandle = barElement.querySelector('.timeline-range-handle.left');
+        const rightHandle = barElement.querySelector('.timeline-range-handle.right');
+
+        // 각 핸들에 mousedown 이벤트를 바인딩합니다.
+        leftHandle.addEventListener('mousedown', (e) => onBarMouseDown(e, barElement, rangeObject, 'left'));
+        rightHandle.addEventListener('mousedown', (e) => onBarMouseDown(e, barElement, rangeObject, 'right'));
+    }
+
+    /**
+     * [신규] 3단계 (이벤트): 핸들에서 'mousedown' (클릭 시작)
+     */
+    function onBarMouseDown(e, barElement, rangeObject, handleType) {
+        e.preventDefault();  // 기본 브라우저 드래그 방지
+        e.stopPropagation(); // 이벤트 버블링 중지
+
+        isResizing = true;
+        currentDragTarget = { barElement, rangeObject, handleType };
+
+        // [중요] 마우스가 브라우저 창 어디로 가든 이벤트를 감지하도록
+        // 'window'에 mousemove와 mouseup 이벤트를 등록합니다.
+        window.addEventListener('mousemove', onBarMouseMove);
+        window.addEventListener('mouseup', onBarMouseUp);
+    }
+
+    /**
+     * [신규] 3단계 (이벤트): 'mousemove' (드래그 중)
+     */
+    function onBarMouseMove(e) {
+        if (!isResizing) return;
+
+        // 1. 타임라인 트랙의 사각형 정보 가져오기
+        const editorRect = objectTimelineEditor.getBoundingClientRect();
+        
+        // 2. 마우스 X좌표를 트랙 내부의 픽셀 좌표로 변환
+        // (트랙의 왼쪽 모서리 = 0)
+        let mouseX = e.clientX - editorRect.left;
+
+        // 3. 픽셀 좌표를 퍼센트(%)로 변환 (0% ~ 100%)
+        let percent = (mouseX / editorRect.width) * 100;
+        
+        // 4. 퍼센트(%)가 0 미만 100 초과가 되지 않도록 제한
+        percent = Math.max(0, Math.min(100, percent));
+
+        // 5. 퍼센트(%)를 실제 '프레임 인덱스'로 변환
+        let newFrame = Math.round((percent / 100) * videoTotalFrames);
+
+        // 6. 현재 드래그 중인 핸들 타입에 따라 데이터(rangeObject) 업데이트
+        const { barElement, rangeObject, handleType } = currentDragTarget;
+
+        if (handleType === 'left') {
+            // 왼쪽 핸들: start 값 변경 (단, end 값보다 커질 수 없음)
+            rangeObject.start = Math.min(newFrame, rangeObject.end);
+        } else {
+            // 오른쪽 핸들: end 값 변경 (단, start 값보다 작아질 수 없음)
+            rangeObject.end = Math.max(newFrame, rangeObject.start);
+        }
+
+        // 7. [실시간 UI 업데이트] 변경된 데이터로 막대의 left, width 재계산
+        const startPercent = (rangeObject.start / videoTotalFrames) * 100;
+        const widthPercent = ((rangeObject.end - rangeObject.start) / videoTotalFrames) * 100;
+
+        barElement.style.left = `${startPercent}%`;
+        barElement.style.width = `${widthPercent}%`;
+    }
+
+    /**
+     * [신규] 3단계 (이벤트): 'mouseup' (클릭 종료)
+     */
+    function onBarMouseUp(e) {
+        if (!isResizing) return;
+        
+        isResizing = false;
+
+        // [4단계 연동] 변경된 데이터를 오른쪽 상세 정보 패널에도 반영합니다.
+        // 현재 선택된 객체를 다시 찾아 상세 정보 UI를 새로고침합니다.
+        const selectedObj = detectedObjects.find(obj => obj.id === selectedObjectID);
+        if (selectedObj) {
+            updateDetailRanges(selectedObj);
+        }
+
+        // [중요] window에 등록했던 이벤트 리스너를 *반드시* 제거합니다.
+        window.removeEventListener('mousemove', onBarMouseMove);
+        window.removeEventListener('mouseup', onBarMouseUp);
     }
 
     /**
