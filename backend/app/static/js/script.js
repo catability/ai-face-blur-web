@@ -82,6 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
         handleType: null
     }
 
+    let currentFrameBboxes = []
+
     // ==========================
     // 3. 헬퍼(Helper) 함수
     // ==========================
@@ -374,10 +376,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.restore();
             }
 
-            ctx.strokeStyle = 'red';
+            const isSelected = (obj && obj.id === selectedObjectID)
+
+            ctx.strokeStyle = isSelected ? 'lime' : 'red';
             ctx.lineWidth = 2;
             ctx.font = '16px Arial';
-            ctx.fillStyle = 'red';
+            ctx.fillStyle = isSelected ? 'lime' : 'red';
             // 스케일링된 좌표로 사각형과 텍스트를 그립니다.
             ctx.strokeRect(canvasX, canvasY, canvasW, canvasH);
             ctx.fillText(`ID: ${obj ? (obj.label || obj.id) : bbox.id}`, canvasX, canvasY - 5);
@@ -430,11 +434,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 4. [수정] allDetectionData[index]가 bboxes 배열 자체임
         //    (예: allDetectionData[0] -> 1번 프레임의 bboxes)
-        const bboxes = allDetectionData[currentFrameIndex]
+        currentFrameBboxes = allDetectionData[currentFrameIndex] ? JSON.parse(allDetectionData[currentFrameIndex]): []
 
         // 5. bbox 데이터가 있으면, 스케일링 파라미터와 함께 그리기
-        if (bboxes) {
-            drawBoundingBoxes(JSON.parse(bboxes), videoDrawParams, currentFrameIndex);
+        if (currentFrameBboxes.length > 0) {
+            drawBoundingBoxes(currentFrameBboxes, videoDrawParams, currentFrameIndex);
         }
     }
 
@@ -485,6 +489,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // 첫 번째 프레임(0.1초)을 그리도록 강제 실행
         mainVideo.currentTime = 0.0;
 
+        mainCanvas.addEventListener('click', handleCanvasClick)
+
         playPauseButton.addEventListener('click', () => {
             isPlaying = !isPlaying; // 재생 상태를 토글합니다.
 
@@ -508,6 +514,62 @@ document.addEventListener('DOMContentLoaded', () => {
             const seekAmount = mainVideo.duration * 0.1;
             mainVideo.currentTime = Math.min(mainVideo.duration, mainVideo.currentTime + seekAmount);
         });
+    }
+
+    /**
+     * [신규] 캔버스 클릭 시, bboxes를 히트 테스트하여 객체 선택/토글
+     */
+    function handleCanvasClick(e) {
+        // --- 1. 클릭 좌표 변환 ---
+        
+        // a. 캔버스 엘리먼트의 화면상 위치와 크기 가져오기
+        const canvasRect = mainCanvas.getBoundingClientRect();
+        
+        // b. CSS에 의해 스케일링된 캔버스 내부의 '진짜' 좌표(1280x720 기준) 계산
+        //    (클릭좌표 - 캔버스시작좌표) * (캔버스내부해상도 / 캔버스표시크기)
+        const scaleX = mainCanvas.width / canvasRect.width;
+        const scaleY = mainCanvas.height / canvasRect.height;
+        const trueCanvasX = (e.clientX - canvasRect.left) * scaleX;
+        const trueCanvasY = (e.clientY - canvasRect.top) * scaleY;
+
+        // c. 'videoDrawParams'를 사용해 '진짜' 좌표를 '원본 비디오' 좌표로 역산
+        const { scale, offsetX, offsetY } = videoDrawParams;
+        const originalX = (trueCanvasX - offsetX) / scale;
+        const originalY = (trueCanvasY - offsetY) / scale;
+
+        // --- 2. 히트 테스트 (Hit Test) ---
+        
+        let clickedObject = null;
+        
+        // 현재 프레임에 보이는 모든 bboxes를 순회
+        // (뒤에서부터 순회해야 겹쳤을 때 위쪽 객체가 먼저 선택됨)
+        for (const bbox of currentFrameBboxes.reverse()) {
+            const isHit = 
+                originalX >= bbox.x && 
+                originalX <= bbox.x + bbox.w &&
+                originalY >= bbox.y &&
+                originalY <= bbox.y + bbox.h;
+            
+            if (isHit) {
+                // bboxes 배열에는 obj.id만 있으므로, detectedObjects에서 원본 객체 찾기
+                clickedObject = detectedObjects.find(o => o.id === bbox.id);
+                break; // 가장 위에 있는 객체 하나만 찾고 중지
+            }
+        }
+
+        // --- 3. [수정] 액션 수행 ---
+        if (clickedObject) {
+            // [신규] 1. (요청사항) 객체 클릭 시, 무조건 블러 상태를 토글합니다.
+            clickedObject.meta.blur = !clickedObject.meta.blur;
+            
+            // [신규] 2. (요청사항) 해당 객체를 '선택'합니다.
+            //    (handleObjectSelect가 알아서 UI를 모두 동기화해줍니다.)
+            handleObjectSelect(clickedObject.id);
+            
+        } else {
+            // (요청사항) 캔버스의 빈 공간을 클릭했을 때 선택 해제
+            handleObjectSelect(null);
+        }
     }
 
     /**
@@ -575,38 +637,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * 오른쪽 패널에서 특정 객체를 클릭했을 때 실행됩니다.
-     * @param {string} id - 선택된 객체의 ID
+     * [수정] 2단계: 객체를 '선택'하고 UI 동기화를 '요청'합니다.
      */
     function handleObjectSelect(id) {
-        selectedObjectID = id;
-        const selectedObj = detectedObjects.find(obj => obj.id === id);
+        selectedObjectID = id; // 전역 선택 ID 업데이트
 
-        if (!selectedObj) return;
-
-        // 1. 리스트에서 'active' 클래스 관리
+        // 1. 리스트 아이템 하이라이트(.active 클래스) 관리
         document.querySelectorAll('.object-item').forEach(item => {
-            item.classList.toggle('active', item.dataset.id === id);
+            // data-id가 'null'이 아닌 경우에만 비교
+            if (id) {
+                item.classList.toggle('active', item.dataset.id === id);
+            } else {
+                item.classList.remove('active'); // null이면 모든 하이라이트 제거
+            }
         });
 
-        // 2. 상세 정보 패널 업데이트
-        detailsPlaceholder.classList.add('hidden');
-        detailsContent.classList.remove('hidden');
+        if (id) {
+            // 선택된 객체가 있는 경우
+            const selectedObj = detectedObjects.find(obj => obj.id === id);
+            if (!selectedObj) return;
 
-        detailIdInput.value = selectedObj.label;
-        detailBlurCheckbox.checked = selectedObj.meta.blur;
+            // 2. 선택된 객체의 상세 타임라인 그리기
+            renderObjectTimeline(selectedObj);
+            
+            // 3. 상세 Ranges 정보 업데이트
+            updateDetailRanges(selectedObj);
 
-        // 3. 상세 타임스탬프 정보 표시
-        // detailTimestamps.innerHTML = '';
-        // selectedObj.timestamps.forEach(ts => {
-        //     const p = document.createElement('p');
-        //     p.textContent = `${formatTime(ts.start)} - ${formatTime(ts.end)}`;
-        //     detailTimestamps.appendChild(p);
-        // });
-
-        updateDetailRanges(selectedObj)
-
-        renderObjectTimeline(selectedObj)
+        } else {
+            // [신규] 선택이 해제된 경우 (id === null)
+            objectTimelineEditor.innerHTML = '<p>오른쪽 리스트에서 객체를 선택하면<br>등장 구간 타임라인이 표시됩니다.</p>';
+        }
+        
+        // 4. [핵심] 모든 UI (상세 패널, 리스트 텍스트, 캔버스)를 
+        //    현재 'selectedObjectID' 상태에 맞게 동기화합니다.
+        syncSelectedObjectUI();
     }
 
     /**
@@ -677,30 +741,43 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * 객체 상세 정보(ID, 블러 여부)가 변경될 때 호출됩니다.
+     * [수정] 1단계: 현재 선택된 객체의 데이터를 모든 UI에 동기화합니다.
+     * (handleDetailsChange -> syncSelectedObjectUI)
      */
-    function handleDetailsChange() {
-        if (!selectedObjectID) return;
+    function syncSelectedObjectUI() {
+        if (!selectedObjectID) {
+            // [신규] 선택이 해제된 경우, 상세 정보 패널을 숨깁니다.
+            detailsPlaceholder.classList.remove('hidden');
+            detailsContent.classList.add('hidden');
+            drawCurrentFrameWithBboxes()
+            return;
+        }
 
         const selectedObj = detectedObjects.find(obj => obj.id === selectedObjectID);
         if (selectedObj) {
-            selectedObj.label = detailIdInput.value;
-            selectedObj.meta.blur = detailBlurCheckbox.checked;
+            // 1. 상세 정보 패널 UI 업데이트 (데이터 -> UI)
+            detailsPlaceholder.classList.add('hidden');
+            detailsContent.classList.remove('hidden');
 
-            // 리스트의 레이블도 함께 업데이트
+            const objIndex = detectedObjects.indexOf(selectedObj);
+            detailIdInput.value = selectedObj.label || `obj-${objIndex + 1}`;
+            detailBlurCheckbox.checked = selectedObj.meta.blur;
+
+            // 2. 오른쪽 객체 리스트 UI 업데이트
             const listItem = objectList.querySelector(`.object-item[data-id="${selectedObjectID}"]`);
             if (listItem) {
-                // listItem.textContent = selectedObj.label;
                 const labelSpan = listItem.querySelector('.object-label');
                 if (labelSpan) {
                     labelSpan.textContent = selectedObj.label;
                 }
-                // 2-2. 블러 상태 텍스트 업데이트
                 const blurSpan = listItem.querySelector('.object-blur-status');
                 if (blurSpan) {
                     blurSpan.textContent = selectedObj.meta.blur ? '🚫 블러됨' : '👁️ 표시됨';
                 }
             }
+
+            // 3. 중앙 캔버스 UI 업데이트 (블러/하이라이트 효과 즉시 반영)
+            drawCurrentFrameWithBboxes();
         }
     }
 
@@ -930,8 +1007,26 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadButton.addEventListener('click', handleDownload);
 
     // 객체 상세 정보 수정 이벤트
-    detailIdInput.addEventListener('input', handleDetailsChange);
-    detailBlurCheckbox.addEventListener('change', handleDetailsChange);
+    detailIdInput.addEventListener('input', () => {
+        if (!selectedObjectID) return;
+        const selectedObj = detectedObjects.find(obj => obj.id === selectedObjectID);
+        if (selectedObj) {
+            // 1. 데이터 변경
+            selectedObj.label = detailIdInput.value;
+            // 2. UI 동기화 (리스트의 이름만 업데이트하면 됨)
+            syncSelectedObjectUI();
+        }
+    });
+    detailBlurCheckbox.addEventListener('change', () => {
+        if (!selectedObjectID) return;
+        const selectedObj = detectedObjects.find(obj => obj.id === selectedObjectID);
+        if (selectedObj) {
+            // 1. 데이터 변경
+            selectedObj.meta.blur = detailBlurCheckbox.checked;
+            // 2. UI 동기화
+            syncSelectedObjectUI();
+        }
+    });
 
     // 비디오 플레이어 컨트롤 초기화
     // syncPlayerControls();
