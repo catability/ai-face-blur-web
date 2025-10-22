@@ -32,3 +32,12 @@ class DetectionLog(db.Model):
 
     frame_idx = db.Column(db.Integer)
     bboxes = db.Column(db.String)
+
+class FaceObject(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.Integer, db.ForeignKey("job.id"), nullable=False)
+    face_id = db.Column(db.Integer, nullable=False)
+    
+    label = db.Column(db.String(100), nullable=False)
+    ranges = db.Column(db.String, nullable=False)
+    meta = db.Column(db.String, nullable=False, default='{ "blur": True }')

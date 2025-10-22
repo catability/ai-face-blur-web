@@ -434,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 4. [수정] allDetectionData[index]가 bboxes 배열 자체임
         //    (예: allDetectionData[0] -> 1번 프레임의 bboxes)
-        currentFrameBboxes = allDetectionData[currentFrameIndex] ? JSON.parse(allDetectionData[currentFrameIndex]): []
+        currentFrameBboxes = allDetectionData[currentFrameIndex] || []
 
         // 5. bbox 데이터가 있으면, 스케일링 파라미터와 함께 그리기
         if (currentFrameBboxes.length > 0) {
@@ -1031,4 +1031,5 @@ document.addEventListener('DOMContentLoaded', () => {
     // 비디오 플레이어 컨트롤 초기화
     // syncPlayerControls();
 
+    window.detectedObjects = () => detectedObjects
 });
