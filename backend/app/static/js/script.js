@@ -66,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let detectedObjects = [];        // 서버에서 받은 탐지 객체 데이터
     let selectedObjectID = null;     // 사용자가 리스트에서 선택한 객체 ID
     let finalDownloadUrl = null;     // Export 완료 후 받을 다운로드 URL
+    let currentJobID = null
 
     let isPlaying = false;
 
@@ -256,6 +257,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!job.job_id) {
                 throw new Error('서버에서 job_id를 받지 못했습니다.')
             }
+
+            currentJobID = job.job_id
 
             updateStatus(`작업(ID: ${job.job_id})이 시작되었습니다. 상태 확인 중...`, 'info', true, job.progress || 0)
 
@@ -875,26 +878,32 @@ document.addEventListener('DOMContentLoaded', () => {
      * '수정 내용 저장' 버튼 클릭 시 실행됩니다.
      */
     async function handleSave() {
+        if (!currentJobID) {
+            updateStatus('저장할 작업(Job) ID가 없습니다.', 'error');
+            return;
+        }
+
         updateStatus('수정된 내용을 서버에 저장 중...', 'info', true, null);
 
-        // --- API 연동 (MOCKUP) ---
-        // TODO: '/api/save'를 실제 Flask API 엔드포인트로 변경하세요.
         try {
-            // (시뮬레이션) 1초간 지연
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            const response = await fetch(`/jobs/${currentJobID}/edits`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(detectedObjects)
+            })
 
-            // (시뮬레이션) 실제 fetch
-            // const response = await fetch('/api/save', {
-            //     method: 'POST',
-            //     headers: { 'Content-Type': 'application/json' },
-            //     body: JSON.stringify(detectedObjects) // 현재 수정된 객체 정보 전체를 전송
-            // });
-            // if (!response.ok) throw new Error('저장 실패');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(errorData?.error || `서버 저장 실패 (HTTP ${response.status})`);
+            }
 
-            updateStatus('수정 내용이 성공적으로 저장되었습니다.', 'success');
+            const result = await response.json(); 
+            
+            updateStatus(result.message || '수정 내용이 성공적으로 저장되었습니다.', 'success');
             progressBar.classList.add('hidden');
 
         } catch (error) {
+            console.error('Save failed:', error);
             updateStatus(`저장 실패: ${error.message}`, 'error');
         }
     }

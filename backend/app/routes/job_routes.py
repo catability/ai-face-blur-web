@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, current_app, url_for, send_file
+from flask import Blueprint, jsonify, current_app, url_for, send_file, request
 from app.models import Video, Job, DetectionLog, FaceObject
 from app.services.video_services import start_export_job_to_video
 from app.app import db
@@ -49,7 +49,7 @@ def get_job_results(job_id):
     if face_objects:
         for log in logs:
             detection_log.append(json.loads(log.bboxes))
-            
+
         for obj in face_objects:
             objectIndex[obj.face_id] = {
                 "id": obj.face_id,
@@ -127,6 +127,41 @@ def get_job_results(job_id):
         "detection_log": detection_log,
         "objects": objects
     })
+
+@job_bp.route("/<int:job_id>/edits", methods=["POST"])
+def save_job_edits(job_id):
+    edited_objects = request.json
+    if not edited_objects or not isinstance(edited_objects, list):
+        return jsonify({
+            "error": "유효하지 않은 데이터입니다."
+        }), 400
+    
+    try:
+        face_objects = FaceObject.query.filter_by(job_id=job_id).all()
+        obj_map = { obj.face_id: obj for obj in face_objects}
+
+        for obj_data in edited_objects:
+            face_id = obj_data.get("id")
+
+            db_row_to_update = obj_map.get(face_id)
+
+            if db_row_to_update:
+                db_row_to_update.label = obj_data.get('label')
+                db_row_to_update.meta = json.dumps(obj_data.get('meta'))
+                db_row_to_update.ranges = json.dumps(obj_data.get('ranges'))
+            else:
+                print(f"Warning: face_id {face_id} (job_id: {job_id})가 DB에 없습니다.")
+        db.session.commit()
+
+        return jsonify({
+            "message": "수정 내용이 성공적으로 저장되었습니다."
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error saving edits for job {job_id}: {e}")
+        return jsonify({
+            "error": f"저장 중 오류 발생: {str(e)}"
+        }), 500
 
 @job_bp.route("/<int:job_id>/export", methods=["POST"])
 def export_job_to_video(job_id):
