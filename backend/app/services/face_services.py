@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 from model.sort.sort import Sort
 from flask import current_app
-from app.models import DetectionLog
+from app.models import DetectionLog, FaceObject
 from app.app import db
 
 import os
@@ -63,6 +63,9 @@ def detect_faces(frame_dir, video, job):
 
 def blur_faces(frames_dir, processed_frames_dir, video, job):
     logs = DetectionLog.query.filter_by(job_id=job.id).order_by(DetectionLog.frame_idx).all()
+    face_objects = FaceObject.query.filter_by(job_id=job.id).all()
+    obj_map = { obj.face_id: obj for obj in face_objects}
+
     last_per = 0
 
     for idx, log in enumerate(logs, start=1):
@@ -83,10 +86,25 @@ def blur_faces(frames_dir, processed_frames_dir, video, job):
         for bbox in bboxes:
             x, y, w, h, track_id = bbox["x"], bbox["y"], bbox["w"], bbox["h"], bbox["id"]
 
-            face_region = img[y:y+h, x:x+w]
-            if face_region.size > 0:
-                blurred = cv2.GaussianBlur(face_region, (51, 51), 30)
-                img[y:y+h, x:x+w] = blurred
+            should_blur = False
+
+            obj = obj_map.get(track_id)
+            if obj:
+                meta = json.loads(obj.meta)
+                if meta["blur"]:
+                    ranges = json.loads(obj.ranges)
+                    for _range in ranges:
+                        if _range.get("start") <= idx <= _range.get("end"):
+                            should_blur = True
+                            break
+            else:
+                should_blur = True
+
+            if should_blur:
+                face_region = img[y:y+h, x:x+w]
+                if face_region.size > 0:
+                    blurred = cv2.GaussianBlur(face_region, (51, 51), 30)
+                    img[y:y+h, x:x+w] = blurred
         
         cv2.imwrite(output_path, img)
 

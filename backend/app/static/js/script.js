@@ -314,6 +314,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.status === 'completed') {
                     updateStatus('작업 완료. 결과 데이터를 가져옵니다...', 'success', true, 100)
                     return true
+                } else if (data.status === 'done') {
+                    updateStatus('작업 완료.', 'success', true, 100)
+                    return true
                 } else if (data.status === 'failed') {
                     throw new Error(data.error_message || '서버에서 작업이 실패했습니다.')
                 } else if (data.status === 'running' || data.status === 'rendering') {
@@ -912,34 +915,37 @@ document.addEventListener('DOMContentLoaded', () => {
      * '영상 Export' 버튼 클릭 시 실행됩니다.
      */
     async function handleExport() {
-        updateStatus('최종 영상 Export를 요청합니다. 시간이 걸릴 수 있습니다...', 'info', true, null);
+        if (!currentJobID) {
+            updateStatus('Export할 작업(Job) ID가 없습니다.', 'error');
+            return;
+        }
 
-        // --- API 연동 (MOCKUP) ---
-        // TODO: '/api/export'를 실제 Flask API 엔드포인트로 변경하세요.
-        // 현재 수정된 데이터를 기반으로 Export를 요청합니다.
+        // Export 버튼 비활성화 (중복 클릭 방지)
+        exportButton.disabled = true;
+        updateStatus('최종 영상 Export 작업을 요청합니다...', 'info', true, 0); // 0%
+
         try {
-            // (시뮬레이션) 5초간 Export 작업
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            const startResponse = await fetch(`/jobs/${currentJobID}/export`, {
+                method: 'POST' 
+            });
+
+            if (!startResponse.ok) {
+                const errData = await startResponse.json().catch(() => null);
+                throw new Error(errData?.error || 'Export 작업 시작 요청 실패');
+            }
             
-            // (시뮬레이션) 실제 fetch
-            // const response = await fetch('/api/export', {
-            //     method: 'POST',
-            //     headers: { 'Content-Type': 'application/json' },
-            //     body: JSON.stringify(detectedObjects)
-            // });
-            // if (!response.ok) throw new Error('Export 요청 실패');
-            // const result = await response.json(); // { downloadUrl: '/api/download/final-video-123' }
+            await startResponse.json(); 
+            updateStatus('Export 작업이 시작되었습니다. 완료 대기 중...', 'info', true, 0);
 
-            // (시뮬레이션) 가상 응답
-            const result = {
-                downloadUrl: '/api/download?file=processed_video_xyz.mp4' // 실제 다운로드 경로
-            };
-            // --- API 연동 (MOCKUP) 종료 ---
+            const statusUrl = `/jobs/${currentJobID}/status`;
+            
+            await pollForJobStatus(statusUrl);
 
-            finalDownloadUrl = result.downloadUrl;
+            exportButton.disabled = false
             updateStatus(`Export 완료! '영상 다운로드' 버튼이 활성화되었습니다.`, 'success');
             progressBar.classList.add('hidden');
-            downloadButton.disabled = false; // 다운로드 버튼 활성화
+            
+            downloadButton.disabled = false
 
         } catch (error) {
             updateStatus(`Export 실패: ${error.message}`, 'error');
@@ -949,14 +955,40 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * '영상 다운로드' 버튼 클릭 시 실행됩니다.
      */
-    function handleDownload() {
-        if (finalDownloadUrl) {
-            // TODO: 'finalDownloadUrl'이 실제 Flask 다운로드 엔드포인트인지 확인하세요.
-            // 이 방식은 서버가 'Content-Disposition: attachment' 헤더를 반환해야 합니다.
-            window.location.href = finalDownloadUrl;
-            updateStatus('다운로드를 시작합니다...', 'info');
-        } else {
-            updateStatus('다운로드 URL이 유효하지 않습니다.', 'error');
+    async function handleDownload() {
+        if (!currentJobID) {
+            updateStatus('다운로드할 작업(Job) ID가 없습니다.', 'error');
+            return;
+        }
+
+        updateStatus('영상을 다운로드 합니다.')
+
+        try {
+            const response = await fetch(`/jobs/${currentJobID}/download`)
+
+            if (!response.ok) {
+                throw new Error('영상 다운로드 실패');
+            }
+            
+            const blob = await response.blob()
+            const url = URL.createObjectURL(blob)
+
+            const contentDisposition = response.headers.get('Content-Disposition')
+            let downloadName = `edited_job_${currentJobID}.mp4`
+
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/)
+                if (filenameMatch && filenameMatch[1]) {
+                    downloadName = filenameMatch[1]
+                }
+            }
+
+            const a = document.createElement('a')
+            a.href = url
+            a.download = downloadName
+            a.click()
+        } catch (error) {
+            updateStatus(`Export 실패: ${error.message}`, 'error');
         }
     }
 
