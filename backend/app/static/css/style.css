@@ -14,6 +14,14 @@ body {
     background-color: #f0f2f5; /* 앱 배경색 */
     color: #333;
     line-height: 1.6;
+
+    /* [추가] body를 세로 flex 컨테이너로 만듭니다. */
+    display: flex;
+    flex-direction: column;
+    /* [추가] 뷰포트 높이로 고정합니다. */
+    height: 100vh;
+    /* [추가] body 레벨의 스크롤을 막습니다. */
+    overflow: hidden;
 }
 
 header {
@@ -22,6 +30,9 @@ header {
     text-align: center;
     border-bottom: 1px solid #ddd;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+
+    /* [추가] body의 flex 자식으로서 높이가 줄어들지 않도록 합니다. */
+    flex-shrink: 0;
 }
 
 h1 {
@@ -89,20 +100,61 @@ button:disabled {
 .main-container {
     display: flex;
     flex-wrap: wrap; /* 화면이 좁아지면 줄바꿈 허용 (모바일 고려) */
-    gap: 20px;
-    padding: 20px;
-    /* 최소 높이를 설정해 뷰포트를 채우도록 함 */
-    min-height: calc(100vh - 80px); /* 헤더 높이 제외 */
+    gap: 10px;
+    padding: 10px;
+
+    /* [수정] 'min-height' 대신 'flex: 1'로 변경하여 남은 공간을 채웁니다. */
+    flex: 1;
+    
+    /* [제거] 이 코드가 스크롤의 주 원인입니다.
+    min-height: calc(100vh - 80px); 
+    */
+
+    /* [추가] flex 자식(패널들)이 이 컨테이너 크기를 넘지 않도록 합니다. */
+    min-height: 0;
 }
 
 .panel {
     background-color: #ffffff;
     border-radius: 8px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
-    padding: 20px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    gap: 15px; /* 패널 내부 요소 간 간격 */
+    gap: 10px; /* 패널 내부 요소 간 간격 */
+    height: 100%;
+}
+
+/* ==========================
+   8. 패널 스크롤링 해결
+   ========================== */
+
+.panel-content-wrapper {
+    /* 1. 부모(.panel)의 남은 세로 공간을 모두 차지합니다. */
+    flex: 1; 
+
+    /* 2. 콘텐츠가 이 영역을 넘치면 내부 스크롤을 생성합니다. */
+    overflow-y: auto;
+
+    /* 3. flex 아이템이 부모보다 작아질 수 있도록 합니다. (매우 중요) */
+    min-height: 0;
+
+    /* (선택적) 래퍼 내부의 요소들도 flex column으로 정렬 */
+    display: flex;
+    flex-direction: column;
+    gap: 10px; /* .panel의 gap과 동일하게 설정 */
+    width: 100%;
+}
+
+.panel-content-wrapper.center {
+    align-items: center;
+}
+
+.panel-center {
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
 /* * 패널 비율 설정: (좌: 1 | 중앙: 2.5 | 우: 1.5)
@@ -132,7 +184,7 @@ button:disabled {
 #video-drop-area {
     border: 2px dashed #007aff;
     border-radius: 8px;
-    padding: 20px;
+    padding: 10px;
     text-align: center;
     background-color: #f9faff;
     cursor: pointer;
@@ -150,13 +202,17 @@ button:disabled {
 #video-drop-area p {
     color: #007aff;
     font-weight: 500;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    align-content: center;
 }
 
 #video-thumbnail {
     /* max-width: 100%; */
     width: 100%;
     /* height: auto; */
-    height: 106px;
+    aspect-ratio: 16 / 9;
+    /* height: 106px; */
     border-radius: 4px;
     object-fit: contain;
     background-color: #000;
@@ -181,7 +237,6 @@ button:disabled {
 #status-message {
     font-size: 0.9rem;
     font-weight: 500;
-    margin-bottom: 8px;
     text-align: center;
 }
 
@@ -217,7 +272,7 @@ button:disabled {
     width: 100%;
     background-color: #000;
     border-radius: 8px;
-    overflow: hidden;
+    /* overflow: hidden; */
     /* 16:9 비율 유지 (요청사항 반영) */
     aspect-ratio: 16 / 9;
     position: relative; /* 세로 영상 대응을 위해 */
@@ -250,7 +305,7 @@ button:disabled {
     /* [신규] 자식 요소(막대)들이 이 태그를 기준으로 절대 위치를 잡도록 함 */
     position: relative; 
     
-    min-height: 100px;
+    min-height: 50px;
     background-color: #f9f9f9;
     border: 1px solid #e0e0e0;
     border-radius: 6px;
@@ -266,6 +321,8 @@ button:disabled {
     text-align: center;
     color: #777;
 
+    font-size: 0.9rem;
+
     /* [신규] 막대가 밖으로 삐져나가지 않도록 함 */
     overflow: hidden; 
 }
@@ -278,9 +335,9 @@ button:disabled {
 .right-panel {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 10px;
     /* 패널 간 간격이 20px이므로 padding도 조절 */
-    padding: 20px;
+    padding: 10px;
 }
 
 #object-list-section {
@@ -411,13 +468,12 @@ button:disabled {
     justify-content: center;
     align-items: center;
     gap: 20px;
-    margin-top: 15px;
 }
 
 #playback-controls button {
-    width: 50px; /* 버튼의 고정 너비 */
-    height: 50px; /* 버튼의 고정 높이 */
-    font-size: 1.5rem; /* 아이콘 텍스트 크기 */
+    width: 30px; /* 버튼의 고정 너비 */
+    height: 30px; /* 버튼의 고정 높이 */
+    font-size: 0.9rem; /* 아이콘 텍스트 크기 */
     font-weight: bold;
     border-radius: 50%; /* 원형 버튼 */
     display: flex;
