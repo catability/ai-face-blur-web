@@ -10,7 +10,8 @@ import numpy as np
 import json
 import math
 
-model = YOLO("model/yolov11n-face.pt")
+# model = YOLO("model/yolov11n-face.pt")
+model = YOLO("model/yolov11n-face_openvino_model")
 
 def detect_faces(frame_dir, video, job):
     tracker = Sort()
