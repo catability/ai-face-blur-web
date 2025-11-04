@@ -671,7 +671,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } else {
             // [신규] 선택이 해제된 경우 (id === null)
-            objectTimelineEditor.innerHTML = '<p>오른쪽 리스트에서 객체를 선택하면<br>등장 구간 타임라인이 표시됩니다.</p>';
+            objectTimelineEditor.innerHTML = '<p>오른쪽 리스트에서 객체를 선택하면 등장 구간 타임라인이 표시됩니다.</p>';
         }
         
         // 4. [핵심] 모든 UI (상세 패널, 리스트 텍스트, 캔버스)를 

@@ -26,7 +26,7 @@ body {
 
 header {
     background-color: #ffffff;
-    padding: 1rem 2rem;
+    padding: 0.5rem 2rem;
     text-align: center;
     border-bottom: 1px solid #ddd;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -46,7 +46,7 @@ h2 {
     color: #1a1a1a;
     border-bottom: 1px solid #eee;
     padding-bottom: 10px;
-    margin-bottom: 15px;
+    /* margin-bottom: 15px; */
 }
 
 /* 각 섹션의 소제목 스타일 (h3) */
@@ -151,7 +151,7 @@ button:disabled {
 }
 
 .panel-center {
-    width: 90%;
+    width: 88%;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -184,7 +184,7 @@ button:disabled {
 #video-drop-area {
     border: 2px dashed #007aff;
     border-radius: 8px;
-    padding: 10px;
+    padding: 4px;
     text-align: center;
     background-color: #f9faff;
     cursor: pointer;
