@@ -1,3 +1,6 @@
+# 영상 업로드
+curl -X POST -F "file=@/ai-face-blur-web/samples/sample1.mp4" http://127.0.0.1:5000/videos/
+
 # 작업 시작 요청
 curl -X POST http://127.0.0.1:5000/videos/<VideoID>/jobs
 
